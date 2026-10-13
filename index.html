@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paint(p5.js)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f4f5;
+    --panel: #ffffff;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --border: #d4d4d8;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --danger: #b91c1c;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #18181b;
+      --panel: #27272a;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --border: #3f3f46;
+      --accent: #60a5fa;
+      --accent-text: #0b1220;
+      --danger: #f87171;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 12px; font-weight: 600; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  .label { color: var(--muted); margin-right: 4px; }
+  button {
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.danger { color: var(--danger); }
+  button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  input[type="color"] { width: 36px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; }
+  input[type="range"] { width: 130px; }
+  input:disabled { opacity: .4; }
+  .val { min-width: 42px; display: inline-block; color: var(--muted); }
+  #wrap { overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: #fff; line-height: 0; }
+  canvas { touch-action: none; display: block; }
+  #hint { color: var(--muted); margin: 8px 0 0; font-size: 13px; }
+  #status { font-size: 13px; color: var(--muted); }
+  #status.error { color: var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paint Sederhana (p5.js)</h1>
+
+  <div class="panel">
+    <div class="row" id="tools">
+      <span class="label">Alat:</span>
+      <button data-tool="select" class="active">Pilih / Geser</button>
+      <button data-tool="point">Titik</button>
+      <button data-tool="line">Garis</button>
+      <button data-tool="rect">Persegi panjang</button>
+      <button data-tool="square">Persegi</button>
+      <button data-tool="ellipse">Elips</button>
+      <button data-tool="circle">Lingkaran</button>
+      <button data-tool="triangle">Segitiga</button>
+    </div>
+    <div class="row">
+      <span class="label">Warna:</span>
+      <input type="color" id="color" value="#2563eb" aria-label="Warna">
+      <span class="label">Tebal garis:</span>
+      <input type="range" id="weight" min="1" max="20" value="4">
+      <span class="val" id="weightVal">4</span>
+      <button class="danger" id="reset">Reset canvas</button>
+    </div>
+    <div class="row">
+      <span class="label">Gambar:</span>
+      <button id="pickFile">Upload file gambar</button>
+      <input type="file" id="file" accept="image/*" hidden>
+      <span id="status" role="status"></span>
+    </div>
+    <div class="row">
+      <span class="label">Objek terpilih:</span>
+      <span class="label">Skala</span>
+      <input type="range" id="scale" min="0.1" max="3" step="0.05" value="1" disabled>
+      <span class="val" id="scaleVal">1.00×</span>
+      <span class="label">Rotasi</span>
+      <input type="range" id="rotation" min="0" max="360" step="1" value="0" disabled>
+      <span class="val" id="rotVal">0°</span>
+      <button id="delete" disabled>Hapus objek</button>
+    </div>
+  </div>
+
+  <div id="wrap"></div>
+  <p id="hint">Pilih alat bentuk lalu seret di canvas. Untuk titik, cukup klik. Gunakan "Pilih / Geser" untuk memilih objek, menggesernya, lalu atur skala dan rotasi. Gambar juga bisa di-drag &amp; drop ke canvas.</p>
+</main>
+
+<script>
+let tool = 'select';
+let objects = [];
+let selected = null;
+let dragStart = null;     // posisi awal saat menggambar bentuk
+let moving = false;       // sedang menggeser objek
+let moveOffset = { x: 0, y: 0 };
+
+const $ = id => document.getElementById(id);
+const CANVAS_H = 500;
+
+function setStatus(msg, isError) {
+  const el = $('status');
+  el.textContent = msg || '';
+  el.classList.toggle('error', !!isError);
+}
+
+function setup() {
+  const wrap = $('wrap');
+  const c = createCanvas(Math.max(200, wrap.clientWidth), CANVAS_H);
+  c.parent(wrap);
+
+  // alat
+  document.querySelectorAll('#tools button').forEach(b => {
+    b.addEventListener('click', () => {
+      tool = b.dataset.tool;
+      document.querySelectorAll('#tools button').forEach(x => x.classList.toggle('active', x === b));
+      if (tool !== 'select') { selected = null; syncUI(); }
+    });
+  });
+
+  // warna & ketebalan
+  $('color').addEventListener('input', e => { if (selected && selected.type !== 'image') selected.color = e.target.value; });
+  $('weight').addEventListener('input', e => {
+    $('weightVal').textContent = e.target.value;
+    if (selected) selected.weight = +e.target.value;
+  });
+
+  // transformasi
+  $('scale').addEventListener('input', e => {
+    if (selected) selected.sc = +e.target.value;
+    $('scaleVal').textContent = (+e.target.value).toFixed(2) + '×';
+  });
+  $('rotation').addEventListener('input', e => {
+    if (selected) selected.rot = radians(+e.target.value);
+    $('rotVal').textContent = e.target.value + '°';
+  });
+
+  // hapus & reset
+  $('delete').addEventListener('click', () => {
+    objects = objects.filter(o => o !== selected);
+    selected = null; syncUI();
+  });
+  $('reset').addEventListener('click', () => {
+    objects = []; selected = null; dragStart = null; moving = false;
+    setStatus(''); syncUI();
+  });
+
+  // muat gambar: dari file
+  $('pickFile').addEventListener('click', () => $('file').click());
+  $('file').addEventListener('change', e => {
+    loadImageFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  // muat gambar: drag & drop ke canvas
+  wrap.addEventListener('dragover', e => e.preventDefault());
+  wrap.addEventListener('drop', e => {
+    e.preventDefault();
+    loadImageFile(e.dataTransfer.files[0]);
+  });
+}
+
+function windowResized() {
+  resizeCanvas(Math.max(200, $('wrap').clientWidth), CANVAS_H);
+}
+
+/* ---------- Muat gambar ---------- */
+
+function loadImageFile(file) {
+  if (!file) return;
+  setStatus('Memuat ' + file.name + '...');
+  const reader = new FileReader();
+  reader.onload = () => {
+    // Pastikan data URL bertipe gambar, walau browser/OS tidak mengisi file.type
+    let data = reader.result;
+    if (data.startsWith('data:;base64,') || data.startsWith('data:application/octet-stream')) {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const mime = ext === 'jpg' ? 'jpeg' : (ext === 'svg' ? 'svg+xml' : ext);
+      data = 'data:image/' + mime + ';base64,' + data.split(',')[1];
+    }
+    loadImageSource(data, file.name);
+  };
+  reader.onerror = () => setStatus('File tidak dapat dibaca.', true);
+  reader.readAsDataURL(file);
+}
+
+function loadImageSource(src, name) {
+  loadImage(
+    src,
+    img => {
+      addImageObject(img);
+      setStatus('Gambar dimuat: ' + (name || ''));
+    },
+    () => setStatus('Gambar gagal dimuat. Pastikan file adalah gambar yang valid.', true)
+  );
+}
+
+function addImageObject(img) {
+  const k = Math.min(1, (width * 0.8) / img.width, (height * 0.8) / img.height);
+  const o = {
+    type: 'image', cx: width / 2, cy: height / 2,
+    w: img.width * k, h: img.height * k,
+    rot: 0, sc: 1, color: '#000000', weight: 1, img
+  };
+  objects.push(o);
+  selected = o;
+  tool = 'select';
+  document.querySelectorAll('#tools button').forEach(x => x.classList.toggle('active', x.dataset.tool === 'select'));
+  syncUI();
+}
+
+function draw() {
+  background(255);
+  for (const o of objects) drawObject(o);
+
+  // pratinjau saat menggambar
+  if (dragStart && tool !== 'select') {
+    drawObject(makeObject(tool, dragStart.x, dragStart.y, mouseX, mouseY));
+  }
+  if (selected) drawSelection(selected);
+}
+
+/* ---------- Objek ---------- */
+
+function makeObject(type, x1, y1, x2, y2) {
+  let w = x2 - x1, h = y2 - y1;
+  let cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+
+  if (type === 'square' || type === 'circle') {
+    const s = Math.max(Math.abs(w), Math.abs(h));
+    const sx = Math.sign(w) || 1, sy = Math.sign(h) || 1;
+    cx = x1 + sx * s / 2; cy = y1 + sy * s / 2;
+    w = h = s;
+  }
+  if (type === 'point') { cx = x1; cy = y1; w = h = 0; }
+
+  // klik tanpa seret -> ukuran default
+  if (type !== 'point' && Math.abs(w) < 5 && Math.abs(h) < 5) {
+    cx = x1; cy = y1;
+    w = 80; h = (type === 'line') ? 0 : 80;
+  }
+  return {
+    type, cx, cy, w, h, rot: 0, sc: 1,
+    color: $('color').value,
+    weight: +$('weight').value
+  };
+}
+
+function drawObject(o) {
+  push();
+  translate(o.cx, o.cy);
+  rotate(o.rot);
+  scale(o.sc);
+
+  const aw = Math.abs(o.w), ah = Math.abs(o.h);
+  rectMode(CENTER);
+  imageMode(CENTER);
+
+  if (o.type === 'image') {
+    image(o.img, 0, 0, o.w, o.h);
+  } else if (o.type === 'point') {
+    stroke(o.color); strokeWeight(o.weight * 2);
+    point(0, 0);
+  } else if (o.type === 'line') {
+    stroke(o.color); strokeWeight(o.weight);
+    line(-o.w / 2, -o.h / 2, o.w / 2, o.h / 2);
+  } else {
+    noStroke(); fill(o.color);   // flat color
+    switch (o.type) {
+      case 'rect':     rect(0, 0, aw, ah); break;
+      case 'square':   square(0, 0, aw); break;
+      case 'ellipse':  ellipse(0, 0, aw, ah); break;
+      case 'circle':   circle(0, 0, aw); break;
+      case 'triangle': triangle(0, -ah / 2, -aw / 2, ah / 2, aw / 2, ah / 2); break;
+    }
+  }
+  pop();
+}
+
+function halfSize(o) {
+  if (o.type === 'point') return [8, 8];
+  return [Math.max(Math.abs(o.w) / 2, 8), Math.max(Math.abs(o.h) / 2, 8)];
+}
+
+function drawSelection(o) {
+  const [hw, hh] = halfSize(o);
+  push();
+  translate(o.cx, o.cy);
+  rotate(o.rot);
+  scale(o.sc);
+  noFill();
+  stroke(37, 99, 235);
+  strokeWeight(1 / o.sc);
+  drawingContext.setLineDash([5 / o.sc, 4 / o.sc]);
+  rectMode(CENTER);
+  rect(0, 0, hw * 2 + 6, hh * 2 + 6);
+  drawingContext.setLineDash([]);
+  pop();
+}
+
+function hitTest(o, mx, my) {
+  // ubah posisi mouse ke koordinat lokal objek (kebalikan translate-rotate-scale)
+  const dx = mx - o.cx, dy = my - o.cy;
+  const c = Math.cos(-o.rot), s = Math.sin(-o.rot);
+  const lx = (dx * c - dy * s) / o.sc;
+  const ly = (dx * s + dy * c) / o.sc;
+  const [hw, hh] = halfSize(o);
+  return Math.abs(lx) <= hw + 3 && Math.abs(ly) <= hh + 3;
+}
+
+/* ---------- Mouse ---------- */
+
+function inCanvas() {
+  return mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height;
+}
+
+function mousePressed() {
+  if (!inCanvas()) return;
+  if (tool === 'select') {
+    selected = null;
+    for (let i = objects.length - 1; i >= 0; i--) {
+      if (hitTest(objects[i], mouseX, mouseY)) { selected = objects[i]; break; }
+    }
+    if (selected) {
+      moving = true;
+      moveOffset = { x: mouseX - selected.cx, y: mouseY - selected.cy };
+      // pindahkan ke paling atas
+      objects = objects.filter(o => o !== selected); objects.push(selected);
+    }
+    syncUI();
+  } else {
+    dragStart = { x: mouseX, y: mouseY };
+  }
+  return false;
+}
+
+function mouseDragged() {
+  if (moving && selected) {
+    selected.cx = mouseX - moveOffset.x;
+    selected.cy = mouseY - moveOffset.y;
+    return false;
+  }
+}
+
+function mouseReleased() {
+  if (dragStart && tool !== 'select') {
+    const o = makeObject(tool, dragStart.x, dragStart.y, mouseX, mouseY);
+    objects.push(o);
+    selected = o;
+    syncUI();
+  }
+  dragStart = null;
+  moving = false;
+}
+
+/* ---------- UI ---------- */
+
+function syncUI() {
+  const has = !!selected;
+  $('scale').disabled = !has;
+  $('rotation').disabled = !has;
+  $('delete').disabled = !has;
+  if (has) {
+    $('scale').value = selected.sc;
+    $('rotation').value = Math.round(degrees(selected.rot) % 360 + 360) % 360;
+    if (selected.type !== 'image') {
+      $('color').value = selected.color;
+      $('weight').value = selected.weight;
+      $('weightVal').textContent = selected.weight;
+    }
+  }
+  $('scaleVal').textContent = (+$('scale').value).toFixed(2) + '×';
+  $('rotVal').textContent = $('rotation').value + '°';
+}
+</script>
+</body>
+</html>
