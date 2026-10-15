@@ -79,7 +79,7 @@
 </head>
 <body>
 <main>
-  <h1>Paint Sederhana (p5.js)</h1>
+  <h1>PaintKW</h1>
 
   <div class="panel">
     <div class="row" id="tools">
@@ -118,17 +118,14 @@
       <button id="delete" disabled>Hapus objek</button>
     </div>
   </div>
-
-  <div id="wrap"></div>
-  <p id="hint">Pilih alat bentuk lalu seret di canvas. Untuk titik, cukup klik. Gunakan "Pilih / Geser" untuk memilih objek, menggesernya, lalu atur skala dan rotasi. Gambar juga bisa di-drag &amp; drop ke canvas.</p>
 </main>
 
 <script>
 let tool = 'select';
 let objects = [];
 let selected = null;
-let dragStart = null;     // posisi awal saat menggambar bentuk
-let moving = false;       // sedang menggeser objek
+let dragStart = null;     
+let moving = false;
 let moveOffset = { x: 0, y: 0 };
 
 const $ = id => document.getElementById(id);
@@ -154,14 +151,16 @@ function setup() {
     });
   });
 
-  // warna & ketebalan
+
+
   $('color').addEventListener('input', e => { if (selected && selected.type !== 'image') selected.color = e.target.value; });
   $('weight').addEventListener('input', e => {
     $('weightVal').textContent = e.target.value;
     if (selected) selected.weight = +e.target.value;
   });
 
-  // transformasi
+
+
   $('scale').addEventListener('input', e => {
     if (selected) selected.sc = +e.target.value;
     $('scaleVal').textContent = (+e.target.value).toFixed(2) + '×';
@@ -171,7 +170,8 @@ function setup() {
     $('rotVal').textContent = e.target.value + '°';
   });
 
-  // hapus & reset
+
+
   $('delete').addEventListener('click', () => {
     objects = objects.filter(o => o !== selected);
     selected = null; syncUI();
@@ -181,14 +181,16 @@ function setup() {
     setStatus(''); syncUI();
   });
 
-  // muat gambar: dari file
+
+
   $('pickFile').addEventListener('click', () => $('file').click());
   $('file').addEventListener('change', e => {
     loadImageFile(e.target.files[0]);
     e.target.value = '';
   });
 
-  // muat gambar: drag & drop ke canvas
+
+
   wrap.addEventListener('dragover', e => e.preventDefault());
   wrap.addEventListener('drop', e => {
     e.preventDefault();
@@ -200,14 +202,15 @@ function windowResized() {
   resizeCanvas(Math.max(200, $('wrap').clientWidth), CANVAS_H);
 }
 
-/* ---------- Muat gambar ---------- */
+
+
 
 function loadImageFile(file) {
   if (!file) return;
   setStatus('Memuat ' + file.name + '...');
   const reader = new FileReader();
   reader.onload = () => {
-    // Pastikan data URL bertipe gambar, walau browser/OS tidak mengisi file.type
+
     let data = reader.result;
     if (data.startsWith('data:;base64,') || data.startsWith('data:application/octet-stream')) {
       const ext = (file.name.split('.').pop() || 'png').toLowerCase();
@@ -248,15 +251,14 @@ function addImageObject(img) {
 function draw() {
   background(255);
   for (const o of objects) drawObject(o);
-
-  // pratinjau saat menggambar
   if (dragStart && tool !== 'select') {
     drawObject(makeObject(tool, dragStart.x, dragStart.y, mouseX, mouseY));
   }
   if (selected) drawSelection(selected);
 }
 
-/* ---------- Objek ---------- */
+
+
 
 function makeObject(type, x1, y1, x2, y2) {
   let w = x2 - x1, h = y2 - y1;
@@ -268,9 +270,10 @@ function makeObject(type, x1, y1, x2, y2) {
     cx = x1 + sx * s / 2; cy = y1 + sy * s / 2;
     w = h = s;
   }
-  if (type === 'point') { cx = x1; cy = y1; w = h = 0; }
+  if (type === 'point') { 
+    cx = x1; cy = y1; w = h = 0; 
+  }
 
-  // klik tanpa seret -> ukuran default
   if (type !== 'point' && Math.abs(w) < 5 && Math.abs(h) < 5) {
     cx = x1; cy = y1;
     w = 80; h = (type === 'line') ? 0 : 80;
@@ -301,7 +304,7 @@ function drawObject(o) {
     stroke(o.color); strokeWeight(o.weight);
     line(-o.w / 2, -o.h / 2, o.w / 2, o.h / 2);
   } else {
-    noStroke(); fill(o.color);   // flat color
+    noStroke(); fill(o.color);
     switch (o.type) {
       case 'rect':     rect(0, 0, aw, ah); break;
       case 'square':   square(0, 0, aw); break;
@@ -335,7 +338,6 @@ function drawSelection(o) {
 }
 
 function hitTest(o, mx, my) {
-  // ubah posisi mouse ke koordinat lokal objek (kebalikan translate-rotate-scale)
   const dx = mx - o.cx, dy = my - o.cy;
   const c = Math.cos(-o.rot), s = Math.sin(-o.rot);
   const lx = (dx * c - dy * s) / o.sc;
@@ -344,7 +346,8 @@ function hitTest(o, mx, my) {
   return Math.abs(lx) <= hw + 3 && Math.abs(ly) <= hh + 3;
 }
 
-/* ---------- Mouse ---------- */
+
+
 
 function inCanvas() {
   return mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height;
@@ -360,7 +363,6 @@ function mousePressed() {
     if (selected) {
       moving = true;
       moveOffset = { x: mouseX - selected.cx, y: mouseY - selected.cy };
-      // pindahkan ke paling atas
       objects = objects.filter(o => o !== selected); objects.push(selected);
     }
     syncUI();
@@ -389,7 +391,8 @@ function mouseReleased() {
   moving = false;
 }
 
-/* ---------- UI ---------- */
+
+
 
 function syncUI() {
   const has = !!selected;
